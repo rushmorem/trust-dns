@@ -1,5 +1,6 @@
 use std::str::FromStr;
 use std::net::IpAddr;
+use std::time::Duration;
 
 use lalrpop_util::ErrorRecovery;
 use trust_dns::rr::Name;
@@ -8,14 +9,33 @@ use system_conf::resolv_conf_ast::*;
 
 grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), ()>>);
 
-//pub configuration: Vec<ConfigOption> {}
+// TODO: there's a cleaner construct for this, but this is simpler...
+pub config: Vec<ConfigOption> = {
+   <v:config_line*> => v.into_iter().filter_map(|c| c).collect(),
+};
 
-pub comment: () = r"[#;][^\n]*" => ();
+pub config_line: Option<ConfigOption> = {
+	<o:config_option> => Some(o),
+	comment => None,
+};
 
-// pub config_option: ConfigOption = {} 
+pub config_option: ConfigOption = {
+	basic_option => ConfigOption::Basic(<>),
+	advanced_options => ConfigOption::Advanced(<>),
+};
+
+pub advanced_options: Vec<AdvancedOption> = {
+	"options" <v:advanced_option+> => v,
+};
+
+pub advanced_option: AdvancedOption = {
+	"ndots:" <n:u8> => AdvancedOption::NumberOfDots(n),
+	"timeout:" <n:u8> => AdvancedOption::Timeout(Duration::from_secs(n as u64)),
+	"attempts:" <n:u8> => AdvancedOption::Attempts(n),
+};
 
 pub basic_option: BasicOption = {
-	"nameserver" <i:ip_addrs> => BasicOption::Nameserver(i),
+	"nameserver" <i:ip_addr> => BasicOption::Nameserver(i),
 	"domain" <n:name> => BasicOption::Domain(n),
 	"search" <n:names> => BasicOption::Search(n),	
 };
@@ -23,7 +43,9 @@ pub basic_option: BasicOption = {
 pub ip_addrs: Vec<IpAddr> = ip_addr+ => <>;
 pub names: Vec<Name> = name+ => <>;
 
+pub comment: () = r"[#;][^\n]*" => ();
 pub ip_addr: IpAddr = r"([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|(?:[0-9a-f]{0,4}:){2,7}[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{1,4})" => IpAddr::from_str(<>).expect("failed to parse IpAddr");
 
 // gah, needed the capture statement!
 pub name: Name = r"([^#;\.\s](?:[\w\S]+\.)+|\.)" => Name::from_str(<>).expect("failed to parse Name");
+pub u8: u8 = <n:r"([0-9]+)"> => u8::from_str(n).expect("failed to parse unsigned 8bit number");
