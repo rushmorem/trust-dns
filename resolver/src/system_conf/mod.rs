@@ -1,3 +1,10 @@
+// Copyright 2015-2017 Benjamin Fry <benjaminfry@me.com>
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
 //! System configuration loading
 //!
 //! This module is resposible for parsing and returning the configuration from
@@ -5,17 +12,22 @@
 //!  system, e.g. most Unixes have this written to `/etc/resolv.conf`
 #![allow(missing_docs)]
 
-use std::io::BufRead;
-
 /// resolv.conf parser
 // TODO: make crate only...
-pub mod resolv_conf;
 mod resolv_conf_ast;
+
+pub mod resolv_conf {
+    // lalrpop from the build script generates the grammar to this file,
+    //  see build.rs for the resolver for details.
+    include!(concat!(env!("OUT_DIR"), "/system_conf/resolv_conf.rs"));
+}
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::fs::File;
+    use std::io::Read;
     use std::net::*;
+    use std::str::FromStr;
     use std::time::Duration;
     use trust_dns::rr::Name;
     use super::*;
@@ -75,15 +87,6 @@ mod tests {
     }
 
     #[test]
-    fn test_ip_addrs() {
-        let mut errors = Vec::new();
-        assert_eq!(
-            resolv_conf::parse_ip_addrs(&mut errors, "127.0.0.1 127.0.0.2").expect("failed"),
-            vec![Ipv4Addr::new(127, 0, 0, 1), Ipv4Addr::new(127, 0, 0, 2)]
-        );
-    }
-
-    #[test]
     fn test_name() {
         let mut errors = Vec::new();
         assert_eq!(
@@ -99,19 +102,6 @@ mod tests {
         assert_eq!(
             resolv_conf::parse_name(&mut errors, "example.com.").unwrap(),
             Name::from_labels(vec!["example", "com"])
-        );
-    }
-
-    #[test]
-    fn test_names() {
-        let mut errors = Vec::new();
-        assert_eq!(
-            resolv_conf::parse_names(&mut errors, "localnet. local.net. intra.local.net.").unwrap(),
-            vec![
-                Name::from_labels(vec!["localnet"]),
-                Name::from_labels(vec!["local", "net"]),
-                Name::from_labels(vec!["intra", "local", "net"]),
-            ]
         );
     }
 
@@ -207,46 +197,92 @@ mod tests {
         );
     }
 
-    //     #[test]
-    //     fn test_full_file() {
-    //         let file = "
-    // #
-    // # This is an example
-    // #
-    // options ndots:8 timeout:8 attempts:8
-    // domain example.com.
-    // nameserver 2001:4860:4860::8888
-    // nameserver 2001:4860:4860::8844
-    // nameserver 8.8.8.8
-    // nameserver 8.8.4.4
-    // ";
-    //         let configuration = vec![
-    //             ConfigOption::Advanced(vec![
-    //                 AdvancedOption::NumberOfDots(8),
-    //                 AdvancedOption::Timeout(Duration::from_secs(8)),
-    //                 AdvancedOption::Attempts(8),
-    //             ]),
-    //             ConfigOption::Basic(BasicOption::Domain(
-    //                 Name::from_labels(vec!["example", "com"]),
-    //             )),
-    //             ConfigOption::Basic(BasicOption::Nameserver(
-    //                 IpAddr::from_str("2001:4860:4860::8888").unwrap(),
-    //             )),
-    //             ConfigOption::Basic(BasicOption::Nameserver(
-    //                 IpAddr::from_str("2001:4860:4860::8844").unwrap(),
-    //             )),
-    //             ConfigOption::Basic(BasicOption::Nameserver(
-    //                 IpAddr::from_str("8.8.8.8").unwrap(),
-    //             )),
-    //             ConfigOption::Basic(BasicOption::Nameserver(
-    //                 IpAddr::from_str("8.8.4.4").unwrap(),
-    //             )),
-    //         ];
+    #[test]
+    fn test_resolv_conf_macos() {
+        let mut data = String::new();
+        let mut file = File::open("tests/resolv.conf-macos").unwrap();
+        file.read_to_string(&mut data).unwrap();
 
-    //         let mut errors = Vec::new();
-    //         assert_eq!(
-    //             resolv_conf::parse_config(&mut errors, file).expect("failed"),
-    //             configuration
-    //         );
-    //     }
+        let configuration = vec![
+            ConfigOption::Advanced(vec![
+                AdvancedOption::NumberOfDots(8),
+                AdvancedOption::Timeout(Duration::from_secs(8)),
+                AdvancedOption::Attempts(8),
+            ]),
+            ConfigOption::Basic(BasicOption::Domain(
+                Name::from_labels(vec!["example", "com"]),
+            )),
+            ConfigOption::Basic(BasicOption::Search(vec![
+                Name::from_labels(vec!["example", "com"]),
+                Name::from_labels(vec!["sub", "example", "com"]),
+            ])),
+            ConfigOption::Basic(BasicOption::Nameserver(
+                IpAddr::from_str("2001:4860:4860::8888").unwrap(),
+            )),
+            ConfigOption::Basic(BasicOption::Nameserver(
+                IpAddr::from_str("2001:4860:4860::8844").unwrap(),
+            )),
+            ConfigOption::Basic(BasicOption::Nameserver(
+                IpAddr::from_str("8.8.8.8").unwrap(),
+            )),
+            ConfigOption::Basic(BasicOption::Nameserver(
+                IpAddr::from_str("8.8.4.4").unwrap(),
+            )),
+        ];
+
+        let mut errors = Vec::new();
+        assert_eq!(
+            resolv_conf::parse_config(&mut errors, &data).expect("failed"),
+            configuration
+        );
+    }
+
+    #[test]
+    fn test_resolv_conf_linux() {
+        let mut data = String::new();
+        let mut file = File::open("tests/resolv.conf-linux").unwrap();
+        file.read_to_string(&mut data).unwrap();
+
+        let configuration =
+            vec![
+                ConfigOption::Advanced(vec![
+                    AdvancedOption::NumberOfDots(8),
+                    AdvancedOption::Timeout(Duration::from_secs(8)),
+                    AdvancedOption::Attempts(8),
+                ]),
+                ConfigOption::Basic(BasicOption::Domain(
+                    Name::from_labels(vec!["example", "com"]),
+                )),
+                ConfigOption::Basic(BasicOption::Search(vec![
+                    Name::from_labels(vec!["example", "com"]),
+                    Name::from_labels(vec!["sub", "example", "com"]),
+                ])),
+                ConfigOption::Basic(BasicOption::Nameserver(
+                    IpAddr::from_str("2001:4860:4860::8888").unwrap(),
+                )),
+                ConfigOption::Basic(BasicOption::Nameserver(
+                    IpAddr::from_str("2001:4860:4860::8844").unwrap(),
+                )),
+                ConfigOption::Basic(BasicOption::Nameserver(
+                    IpAddr::from_str("8.8.8.8").unwrap(),
+                )),
+                ConfigOption::Basic(BasicOption::Nameserver(
+                    IpAddr::from_str("8.8.4.4").unwrap(),
+                )),
+                ConfigOption::Advanced(vec![AdvancedOption::Unknown("rotate", None)]),
+                ConfigOption::Advanced(vec![
+                    AdvancedOption::Unknown("inet6", None),
+                    AdvancedOption::Unknown("no-tld-query", None),
+                ]),
+                ConfigOption::Basic(BasicOption::SortList(
+                    "sortlist 130.155.160.0/255.255.240.0 130.155.0.0",
+                )),
+            ];
+
+        let mut errors = Vec::new();
+        assert_eq!(
+            resolv_conf::parse_config(&mut errors, &data).expect("failed"),
+            configuration
+        );
+    }
 }
