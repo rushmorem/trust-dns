@@ -81,14 +81,6 @@ pub enum AdvancedOption<'input> {
 }
 
 impl<'input> AdvancedOption<'input> {
-    pub fn collect(self, config: ResolverConfig) -> ResolverConfig {
-
-        config
-    }
-}
-
-
-impl<'input> AdvancedOption<'input> {
     pub fn parse(option: &'input str) -> Self {
         let mut key_value = option.split(":");
 
