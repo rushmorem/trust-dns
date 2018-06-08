@@ -1307,7 +1307,7 @@ pub struct AnyRecordsIter<'r, 'q> {
 }
 
 impl<'r, 'q> AnyRecordsIter<'r, 'q> {
-    fn new(
+    pub fn new(
         is_secure: bool,
         supported_algorithms: SupportedAlgorithms,
         rrsets: Values<'r, RrKey, RecordSet>,
