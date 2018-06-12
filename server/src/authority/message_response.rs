@@ -114,6 +114,11 @@ impl<'q, 'a> MessageResponseBuilder<'q, 'a> {
         self
     }
 
+    pub fn additionals(&mut self, records: Vec<&'a Record>) -> &mut Self {
+        self.additionals = Some(records);
+        self
+    }
+
     /// Associate EDNS with the Response
     pub fn edns(&mut self, edns: Edns) -> &mut Self {
         self.edns = Some(edns);
