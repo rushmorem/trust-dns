@@ -114,6 +114,7 @@ impl<'q, 'a> MessageResponseBuilder<'q, 'a> {
         self
     }
 
+    /// Associate a set of additionals with the response, generally owned by either a cache or [`trust_dns_server::authorith::Authority`]
     pub fn additionals(&mut self, records: Vec<&'a Record>) -> &mut Self {
         self.additionals = Some(records);
         self
